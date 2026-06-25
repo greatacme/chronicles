@@ -132,7 +132,9 @@ ul.collapsed{display:none}
 /* 현재 포커스 인물 */
 .search-focus > .node-wrap .chip{background:#ffe033 !important;border-color:#c8a000 !important;box-shadow:0 0 0 3px rgba(200,160,0,.35) !important;transform:translateY(-1px)}
 /* 검색 중 비매칭 노드만 흐리게 — 자식에게 전파 안 됨 */
-.search-active .tree-node:not(.highlight):not(.search-focus) > .node-wrap{opacity:0.18}
+.search-active .tree-node:not(.highlight):not(.search-focus):not(.spouse-parent-hit) > .node-wrap{opacity:0.18}
+.spouse-chip.highlight{background:#fff7cc !important;border-color:#e8c000 !important;box-shadow:0 0 0 2px rgba(232,192,0,.25) !important;color:#7a5800 !important}
+.spouse-chip.search-focus{background:#ffe033 !important;border-color:#c8a000 !important;box-shadow:0 0 0 3px rgba(200,160,0,.35) !important;transform:translateY(-1px)}
 
 
 
@@ -1247,6 +1249,9 @@ function buildNodeEl(node) {
           /* 배우자: node-wrap 옆 인라인 칩 */
           var sp = document.createElement('span');
           sp.className = 'spouse-chip';
+          sp.setAttribute('data-id', child.id);
+          sp.setAttribute('data-name', child.name);
+          sp.setAttribute('data-parent-id', node.id);
           sp.title = child.desc || '';
           sp.innerHTML = '<span class="sp-heart">\u2665</span><span class="sp-name">' + child.name + '</span><span class="sp-ref">\ub300\uc0c1' + child.ref + '</span>';
           wrap.appendChild(sp);
@@ -1348,7 +1353,11 @@ function collapseAllUls() {
 function clearSearchHighlight() {
   var nodes = document.querySelectorAll('.tree-node');
   for(var i=0; i<nodes.length; i++) {
-    nodes[i].classList.remove('highlight','search-focus');
+    nodes[i].classList.remove('highlight','search-focus','spouse-parent-hit');
+  }
+  var spouseHits = document.querySelectorAll('.spouse-chip.highlight, .spouse-chip.search-focus');
+  for(var si=0; si<spouseHits.length; si++) {
+    spouseHits[si].classList.remove('highlight','search-focus');
   }
   var rt = document.getElementById('root-tree');
   if(rt) rt.classList.remove('search-active');
@@ -1364,16 +1373,23 @@ function clearSearch() {
   if(srSnapshot) { restoreCollapse(srSnapshot); srSnapshot=null; }
 }
 
-function scrollToNode(li) {
-  var chip = li.querySelector('.chip');
-  if(chip && chip.scrollIntoView) chip.scrollIntoView({behavior:'smooth', block:'center'});
+function scrollToNode(el) {
+  var target = el.classList && el.classList.contains('spouse-chip') ? el : el.querySelector('.chip');
+  if(target && target.scrollIntoView) target.scrollIntoView({behavior:'smooth', block:'center'});
 }
 function focusResult(idx) {
   var nodes = document.querySelectorAll('.search-focus');
   for(var i=0; i<nodes.length; i++) nodes[i].classList.remove('search-focus');
+  var parents = document.querySelectorAll('.spouse-parent-hit');
+  for(var pi=0; pi<parents.length; pi++) parents[pi].classList.remove('spouse-parent-hit');
   if(!srResults.length) return;
   srIdx = ((idx % srResults.length) + srResults.length) % srResults.length;
   srResults[srIdx].classList.add('search-focus');
+  if(srResults[srIdx].classList.contains('spouse-chip')) {
+    var pid = srResults[srIdx].getAttribute('data-parent-id');
+    var pli = document.querySelector('.tree-node[data-id="'+pid+'"]');
+    if(pli) pli.classList.add('spouse-parent-hit');
+  }
   scrollToNode(srResults[srIdx]);
   var cnt=document.getElementById('search-count');
   if(cnt) cnt.textContent = srResults.length===1 ? '1\uac74' : (srIdx+1)+' / '+srResults.length;
@@ -1408,7 +1424,9 @@ function openPathTo(targetId) {
 function handleSearch(val) {
   var nodes, i;
   nodes=document.querySelectorAll('.tree-node');
-  for(i=0;i<nodes.length;i++) nodes[i].classList.remove('highlight','search-focus');
+  for(i=0;i<nodes.length;i++) nodes[i].classList.remove('highlight','search-focus','spouse-parent-hit');
+  var spouseHits=document.querySelectorAll('.spouse-chip.highlight, .spouse-chip.search-focus');
+  for(i=0;i<spouseHits.length;i++) spouseHits[i].classList.remove('highlight','search-focus');
   var rt=document.getElementById('root-tree');
   if(rt) rt.classList.remove('search-active');
   srResults=[]; srIdx=0;
@@ -1439,7 +1457,15 @@ function handleSearch(val) {
   srResults=[];
   for(i=0;i<matchIds.length;i++) {
     var li=document.querySelector('.tree-node[data-id="'+matchIds[i]+'"]');
-    if(li){ li.classList.add('highlight'); srResults.push(li); }
+    if(li){ li.classList.add('highlight'); srResults.push(li); continue; }
+    var sp=document.querySelector('.spouse-chip[data-id="'+matchIds[i]+'"]');
+    if(sp){
+      sp.classList.add('highlight');
+      var pid=sp.getAttribute('data-parent-id');
+      var pli=document.querySelector('.tree-node[data-id="'+pid+'"]');
+      if(pli) pli.classList.add('spouse-parent-hit');
+      srResults.push(sp);
+    }
   }
   if(cnt){ cnt.style.display='block'; }
   if(srResults.length>1){ if(bp) bp.style.display=''; if(bn) bn.style.display=''; }
